@@ -167,6 +167,7 @@
     document.getElementById('googleBtn').addEventListener('click', () => {
       show('loadingView');
       const provider = new firebase.auth.GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
       auth.signInWithPopup(provider).catch(e => {
         show('loginView', e.code === 'auth/popup-closed-by-user' ? null : e.message);
       });

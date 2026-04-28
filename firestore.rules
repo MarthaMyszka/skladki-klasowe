@@ -11,7 +11,7 @@ service cloud.firestore {
     }
     function isParentOf(studentId) {
       return isLoggedIn() &&
-             get(/databases/$(database)/documents/students/$(studentId)).data.parentEmails.hasAny([request.auth.token.email]);
+             get(/databases/$(database)/documents/students/$(studentId)).data.parentEmails.hasAny([request.auth.token.email.lower()]);
     }
 
     // ── users ─────────────────────────────────────────────
@@ -24,7 +24,7 @@ service cloud.firestore {
     match /students/{studentId} {
       allow read:  if isAdmin() ||
                       (isLoggedIn() &&
-                       resource.data.parentEmails.hasAny([request.auth.token.email]));
+                       resource.data.parentEmails.hasAny([request.auth.token.email.lower()]));
       allow write: if isAdmin();
     }
 
@@ -46,7 +46,17 @@ service cloud.firestore {
     // Rodzic tworzy swój własny wniosek po pierwszym logowaniu.
     // Admin widzi wszystkie wnioski i je zatwierdza.
     match /requests/{uid} {
-      allow create: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.uid    == request.auth.uid
+        && request.resource.data.email  == request.auth.token.email.lower()
+        && request.resource.data.status == 'pending'
+        && request.resource.data.childFirstName is string
+        && request.resource.data.childFirstName.size() > 0
+        && request.resource.data.childFirstName.size() <= 100
+        && request.resource.data.childLastName is string
+        && request.resource.data.childLastName.size() > 0
+        && request.resource.data.childLastName.size() <= 100;
       allow read:   if request.auth != null &&
                        (request.auth.uid == uid || isAdmin());
       allow update, delete: if isAdmin();
