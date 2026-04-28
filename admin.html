@@ -195,9 +195,9 @@
           <input type="tel" id="sPhone" placeholder="Tel. rodzica"
             class="border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
         </div>
-        <input type="date" id="sEnrolled"
+        <input type="month" id="sEnrolled"
           class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-300"
-          title="Od kiedy w klasie">
+          title="Od kiedy w klasie" placeholder="Miesiąc dołączenia (opcjonalnie)">
         <button id="btnDoAddStudent"
           class="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-xl py-2 text-sm font-semibold transition-colors">
           + Dodaj ucznia
@@ -984,7 +984,7 @@
         <td class="px-3 py-3 text-center">${statusHtml}</td>
         <td class="px-3 py-3 text-xs text-gray-500 hidden sm:table-cell">${s.parentPhone || '—'}</td>
         <td class="px-3 py-3 text-xs text-gray-500 hidden sm:table-cell">${s.parentName || '—'}</td>
-        <td class="px-3 py-3 text-xs text-gray-500 hidden sm:table-cell">${s.enrolledFrom || '—'}</td>
+        <td class="px-3 py-3 text-xs text-gray-500 hidden sm:table-cell">${s.enrolledFrom ? s.enrolledFrom.split('-').reverse().join('.') : '—'}</td>
         <td class="hidden px-3 py-3 text-center settings-del-cell">
           <button onclick="deleteStudent('${s.id}','${s.firstName} ${s.lastName}')"
             class="text-red-300 hover:text-red-500 font-bold text-base transition-colors">✕</button>
