@@ -57,6 +57,10 @@
             class="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
           <input type="text" id="regLast" required placeholder="Nazwisko dziecka *"
             class="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+          <input type="text" id="regParentName" required placeholder="Twoje imię *"
+            class="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+          <input type="tel" id="regParentPhone" required placeholder="Twój numer telefonu *"
+            class="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
           <button type="submit"
             class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl py-2.5 text-sm transition-colors">
             Wyślij wniosek
@@ -176,9 +180,11 @@
       const user = auth.currentUser;
       if (!user) return;
 
-      const firstName = document.getElementById('regFirst').value.trim();
-      const lastName  = document.getElementById('regLast').value.trim();
-      if (!firstName || !lastName) return;
+      const firstName   = document.getElementById('regFirst').value.trim();
+      const lastName    = document.getElementById('regLast').value.trim();
+      const parentName  = document.getElementById('regParentName').value.trim();
+      const parentPhone = document.getElementById('regParentPhone').value.trim();
+      if (!firstName || !lastName || !parentName || !parentPhone) return;
 
       btn.disabled = true; btn.textContent = 'Wysyłam…';
       try {
@@ -187,6 +193,8 @@
           email: user.email.toLowerCase(),
           childFirstName: firstName,
           childLastName: lastName,
+          parentName,
+          parentPhone,
           status: 'pending',
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
