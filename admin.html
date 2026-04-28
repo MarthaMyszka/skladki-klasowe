@@ -891,20 +891,75 @@
     list.innerHTML = '';
     G.classes.forEach(cl => {
       const div = document.createElement('div');
+      div.id = `classRow_${cl.id}`;
       div.className = 'px-4 py-3 flex justify-between items-center';
       const label = cl.label || getClassLabel(cl.schoolYear);
+      const isActive = cl.schoolYear === G.year;
       div.innerHTML = `
         <div>
           <div class="font-semibold text-gray-800 text-sm">${label}</div>
-          <div class="text-xs text-gray-400">${fmtYear(cl.schoolYear)}</div>
+          <div class="text-xs text-gray-400">${cl.schoolYear}</div>
         </div>
-        <span class="text-xs px-2.5 py-1 rounded-full font-semibold ${
-          cl.schoolYear === G.year
-          ? 'bg-blue-100 text-blue-700'
-          : 'bg-gray-100 text-gray-400'
-        }">${cl.schoolYear === G.year ? 'Aktywna' : fmtYear(cl.schoolYear)}</span>`;
+        <div class="flex items-center gap-2">
+          <span class="text-xs px-2.5 py-1 rounded-full font-semibold ${
+            isActive ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'
+          }">${isActive ? 'Aktywna' : cl.schoolYear}</span>
+          <button onclick="startEditClass('${cl.id}','${label.replace(/'/g,"\\'")}','${cl.schoolYear}')"
+            class="text-blue-400 hover:text-blue-600 text-sm transition-colors" title="Edytuj nazwę">✏️</button>
+          <button onclick="deleteClass('${cl.id}','${label.replace(/'/g,"\\'")}','${cl.schoolYear}')"
+            class="text-red-300 hover:text-red-500 font-bold text-base transition-colors" title="Usuń klasę">✕</button>
+        </div>`;
       list.appendChild(div);
     });
+  }
+
+  function startEditClass(id, label, schoolYear) {
+    const row = document.getElementById(`classRow_${id}`);
+    if (!row) return;
+    row.innerHTML = `
+      <div class="flex items-center gap-2 flex-1 mr-2">
+        <input id="editClassLabel_${id}" type="text" value="${label}"
+          class="border border-gray-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 w-28">
+        <span class="text-xs text-gray-400">${schoolYear}</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="saveEditClass('${id}','${schoolYear}')"
+          class="bg-blue-500 hover:bg-blue-600 text-white rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors">Zapisz</button>
+        <button onclick="renderClassesTab()"
+          class="border border-gray-300 rounded-xl px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50 transition-colors">Anuluj</button>
+      </div>`;
+    document.getElementById(`editClassLabel_${id}`).focus();
+  }
+
+  async function saveEditClass(id, schoolYear) {
+    const input = document.getElementById(`editClassLabel_${id}`);
+    const newLabel = input ? input.value.trim() : '';
+    if (!newLabel) { if (input) input.classList.add('border-red-400'); return; }
+    try {
+      await db.collection('classes').doc(id).update({ label: newLabel });
+      const cl = G.classes.find(c => c.id === id);
+      if (cl) cl.label = newLabel;
+      buildYearTabs();
+      renderClassesTab();
+    } catch(e) {
+      alert('Błąd zapisu: ' + e.message);
+    }
+  }
+
+  async function deleteClass(id, label, schoolYear) {
+    if (schoolYear === G.year) {
+      alert(`Nie można usunąć aktywnej klasy „${label}".\nNajpierw przełącz się na inny rocznik.`);
+      return;
+    }
+    if (!confirm(`Usunąć klasę „${label}" (${schoolYear})?\n\nSkładki i płatności z tego rocznika pozostaną w bazie, ale zakładka zniknie z panelu.`)) return;
+    try {
+      await db.collection('classes').doc(id).delete();
+      G.classes = G.classes.filter(c => c.id !== id);
+      buildYearTabs();
+      renderClassesTab();
+    } catch(e) {
+      alert('Błąd usuwania: ' + e.message);
+    }
   }
 
   document.getElementById('btnDoAddClass').onclick = async () => {
@@ -1016,6 +1071,14 @@
 
     if (!firstName || !lastName) {
       msg.textContent = 'Imię i nazwisko są wymagane.';
+      msg.className = 'text-xs text-center mt-2 text-red-600'; msg.classList.remove('hidden'); return;
+    }
+    const duplicate = G.students.find(s =>
+      s.firstName.toLowerCase() === firstName.toLowerCase() &&
+      s.lastName.toLowerCase()  === lastName.toLowerCase()
+    );
+    if (duplicate) {
+      msg.textContent = `Uczeń ${duplicate.firstName} ${duplicate.lastName} już istnieje na liście.`;
       msg.className = 'text-xs text-center mt-2 text-red-600'; msg.classList.remove('hidden'); return;
     }
     try {
