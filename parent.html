@@ -28,6 +28,25 @@
     <div class="max-w-lg mx-auto px-4 flex gap-1 pb-2 overflow-x-auto" id="yearTabs"></div>
   </header>
 
+  <!-- Baner RODO (dla rodziców bez zapisanej zgody) -->
+  <div id="gdprBanner" class="hidden bg-amber-50 border-b border-amber-200">
+    <div class="max-w-lg mx-auto px-4 py-3 flex items-start gap-3">
+      <span class="text-lg flex-shrink-0 mt-0.5">🔒</span>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm text-amber-900 font-semibold">Aktualizacja klauzuli informacyjnej RODO</p>
+        <p class="text-xs text-amber-700 mt-0.5 leading-relaxed">
+          Zaktualizowaliśmy zasady przetwarzania danych osobowych.
+          Zapoznaj się z <a href="privacy.html" target="_blank" class="underline font-semibold">klauzulą informacyjną RODO</a>
+          i potwierdź zapoznanie, aby kontynuować korzystanie z aplikacji.
+        </p>
+      </div>
+      <button id="gdprConfirmBtn"
+        class="flex-shrink-0 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors whitespace-nowrap">
+        Potwierdzam
+      </button>
+    </div>
+  </div>
+
   <!-- Ładowanie -->
   <div id="loadingView" class="flex flex-col items-center justify-center h-64 gap-3">
     <div class="w-10 h-10 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin"></div>
@@ -81,6 +100,9 @@
 
     <p class="text-center text-xs text-gray-400 pb-4">
       Dane aktualizowane przez skarbnika klasy.
+    </p>
+    <p class="text-center text-xs text-gray-400 pb-6">
+      <a href="privacy.html" class="underline hover:text-gray-600">Klauzula informacyjna RODO</a>
     </p>
   </main>
 
@@ -262,6 +284,30 @@
       document.getElementById('totalOwed').textContent   = owed + ' zł';
     }
 
+    // ── Zgoda RODO ────────────────────────────────────────
+    async function checkGdprConsent(user) {
+      const consentDoc = await db.collection('consents').doc(user.uid).get();
+      // Brak zgody = nowy rekord potrzebny (stary rodzic lub nowy bez gdprConsentAt)
+      const hasConsent = consentDoc.exists && consentDoc.data().gdprConsentAt;
+      if (!hasConsent) {
+        document.getElementById('gdprBanner').classList.remove('hidden');
+      }
+    }
+
+    document.getElementById('gdprConfirmBtn').addEventListener('click', async () => {
+      const user = auth.currentUser;
+      if (!user) return;
+      try {
+        await db.collection('consents').doc(user.uid).set({
+          uid: user.uid,
+          email: user.email.toLowerCase(),
+          gdprConsentAt: firebase.firestore.FieldValue.serverTimestamp(),
+          privacyVersion: '2026-04'
+        });
+        document.getElementById('gdprBanner').classList.add('hidden');
+      } catch(e) { console.error('Błąd zapisu zgody:', e); }
+    });
+
     // ── Auth ──────────────────────────────────────────────
     auth.onAuthStateChanged(async (user) => {
       if (!user) { window.location.href = 'index.html'; return; }
@@ -276,7 +322,10 @@
         document.getElementById('studentName').textContent  = `${s.firstName} ${s.lastName}`;
         document.getElementById('classLabel').textContent   = getClassLabel(selectedYear);
 
-        await buildYearTabs(user.email);
+        await Promise.all([
+          buildYearTabs(user.email),
+          checkGdprConsent(user)
+        ]);
         await loadContribs();
         showMain();
       } catch(e) { showError('Błąd: ' + e.message); }

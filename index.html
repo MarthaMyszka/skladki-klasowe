@@ -36,6 +36,10 @@
           </svg>
           Zaloguj się przez Google
         </button>
+        <p class="text-center text-xs text-gray-400 mt-3 leading-relaxed">
+          Logując się, potwierdzasz zapoznanie się z
+          <a href="privacy.html" target="_blank" class="underline hover:text-gray-600">klauzulą informacyjną RODO</a>.
+        </p>
       </div>
 
       <!-- ── WIDOK: Ładowanie ── -->
@@ -53,14 +57,24 @@
         </div>
         <div id="regUserInfo" class="bg-blue-50 rounded-xl p-3 mb-4 text-sm text-center text-blue-700"></div>
         <form id="registerForm" class="space-y-3">
-          <input type="text" id="regFirst" required placeholder="Imię dziecka *"
+          <input type="text" id="regFirst" required placeholder="Imię dziecka *" maxlength="100"
             class="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
-          <input type="text" id="regLast" required placeholder="Nazwisko dziecka *"
+          <input type="text" id="regLast" required placeholder="Nazwisko dziecka *" maxlength="100"
             class="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
-          <input type="text" id="regParentName" required placeholder="Twoje imię *"
+          <input type="text" id="regParentName" required placeholder="Twoje imię *" maxlength="100"
             class="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
-          <input type="tel" id="regParentPhone" required placeholder="Twój numer telefonu *"
+          <input type="tel" id="regParentPhone" required placeholder="Twój numer telefonu *" maxlength="30"
             class="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+          <label class="flex items-start gap-2 cursor-pointer">
+            <input type="checkbox" id="gdprConsent" required
+              class="mt-0.5 flex-shrink-0 w-4 h-4 rounded accent-blue-500">
+            <span class="text-xs text-gray-500 leading-relaxed">
+              Zapoznałem/am się z
+              <a href="privacy.html" target="_blank" class="underline text-blue-500">klauzulą informacyjną RODO</a>
+              i wyrażam zgodę na przetwarzanie moich danych osobowych oraz danych mojego dziecka
+              w celu zarządzania składkami klasowymi. *
+            </span>
+          </label>
           <button type="submit"
             class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl py-2.5 text-sm transition-colors">
             Wyślij wniosek
@@ -185,7 +199,14 @@
       const lastName    = document.getElementById('regLast').value.trim();
       const parentName  = document.getElementById('regParentName').value.trim();
       const parentPhone = document.getElementById('regParentPhone').value.trim();
+      const gdprConsent = document.getElementById('gdprConsent').checked;
       if (!firstName || !lastName || !parentName || !parentPhone) return;
+      if (!gdprConsent) {
+        msg.textContent = 'Zaznacz zgodę na przetwarzanie danych osobowych.';
+        msg.className = 'text-center text-xs mt-3 text-red-600';
+        msg.classList.remove('hidden');
+        return;
+      }
 
       btn.disabled = true; btn.textContent = 'Wysyłam…';
       try {
@@ -197,6 +218,7 @@
           parentName,
           parentPhone,
           status: 'pending',
+          gdprConsentAt: firebase.firestore.FieldValue.serverTimestamp(),
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
         document.getElementById('pendingEmail').textContent = user.email;
