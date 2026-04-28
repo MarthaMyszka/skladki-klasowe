@@ -176,7 +176,7 @@
         .where('studentId','==', studentId)
         .where('schoolYear','==', selectedYear).get();
       const pMap = {};
-      pSnap.docs.forEach(d => { pMap[d.data().contributionId] = d.data(); });
+      pSnap.docs.forEach(d => { pMap[d.data().contribId] = d.data(); });
 
       cards.innerHTML = '';
       contribs.forEach(c => {
