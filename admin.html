@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel Skarbnika</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <style>
+    .sticky-col { position: sticky; left: 0; background: white; z-index: 5; }
+    tr:hover .sticky-col { background: #f9fafb; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen pb-24">
+
+<!-- ══════════════════════════════════════════════════════
+     NAGŁÓWEK (sticky)
+══════════════════════════════════════════════════════ -->
+<header class="bg-white border-b border-gray-200 sticky top-0 z-30">
+  <div class="max-w-lg mx-auto px-4 py-2.5 flex items-center justify-between gap-3">
+    <!-- Zakładki lat/klas -->
+    <div class="flex gap-1 overflow-x-auto flex-1" id="yearTabs"></div>
+    <!-- Przyciski -->
+    <div class="flex gap-2 flex-shrink-0">
+      <button id="btnLogout" title="Wyloguj"
+        class="w-8 h-8 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center text-sm transition-colors">
+        ↩
+      </button>
+      <button id="btnSettings" title="Lista uczniów"
+        class="w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors text-base">
+        ⚙️
+      </button>
+      <button id="btnNewContrib" title="Nowa składka"
+        class="w-9 h-9 rounded-full bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center font-bold text-xl transition-colors">
+        +
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- Brak dostępu -->
+<div id="accessDenied" class="hidden flex flex-col items-center justify-center h-64 gap-3">
+  <div class="text-5xl">🔒</div>
+  <p class="text-gray-600">Brak uprawnień do panelu skarbnika.</p>
+</div>
+
+<!-- Ładowanie -->
+<div id="loadingView" class="flex flex-col items-center justify-center h-64 gap-3">
+  <div class="w-10 h-10 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin"></div>
+  <p class="text-gray-400 text-sm">Ładowanie…</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     GŁÓWNA ZAWARTOŚĆ (3 widoki)
+══════════════════════════════════════════════════════ -->
+<div id="appContent" class="hidden max-w-lg mx-auto">
+
+  <!-- ════════ WIDOK: GŁÓWNY (składki + tabela) ════════ -->
+  <div id="viewMain">
+    <!-- Chipsy zbiórek -->
+    <div class="px-4 pt-4 pb-2 flex gap-2 flex-wrap" id="contribChips"></div>
+    <!-- Treść -->
+    <div id="mainContent" class="px-4"></div>
+  </div>
+
+  <!-- ════════ WIDOK: NOWA SKŁADKA ════════ -->
+  <div id="viewNewContrib" class="hidden px-4 pt-4">
+    <div class="flex items-center gap-3 mb-5">
+      <button id="btnCancelNew" class="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500 text-lg">←</button>
+      <h2 class="font-bold text-gray-800">Nowa składka</h2>
+    </div>
+    <form id="newContribForm" class="space-y-4 bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Nazwa składki *</label>
+        <input type="text" id="ncName" required placeholder="np. Artykuły klasowe"
+          class="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Tytuł przelewu *</label>
+        <input type="text" id="ncTransfer" required placeholder="np. ARTYKULY_KL1_2026"
+          class="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+        <p class="text-xs text-gray-400 mt-1">Wpisz ten tytuł w ogłoszeniu – rodzice widzą go na swoim panelu.</p>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Kwota (zł) *</label>
+          <input type="number" id="ncAmount" required min="1" placeholder="50"
+            class="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Termin</label>
+          <input type="date" id="ncDue"
+            class="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+        </div>
+      </div>
+      <!-- Lista uczniów z checkboxami -->
+      <div>
+        <div class="flex justify-between items-center mb-2">
+          <label class="text-sm font-medium text-gray-700">Uczestnicy</label>
+          <button type="button" id="ncToggleAll" class="text-xs text-blue-500 hover:underline">Odznacz wszystkich</button>
+        </div>
+        <div id="ncStudentList" class="bg-gray-50 rounded-xl border border-gray-200 divide-y divide-gray-100 max-h-52 overflow-y-auto"></div>
+      </div>
+      <p id="ncMsg" class="text-sm text-center hidden"></p>
+      <div class="flex gap-3 pt-1">
+        <button type="button" id="btnCancelNew2"
+          class="flex-1 border border-gray-300 rounded-xl py-2.5 text-gray-700 text-sm font-medium">Anuluj</button>
+        <button type="submit"
+          class="flex-1 bg-green-500 hover:bg-green-600 text-white rounded-xl py-2.5 text-sm font-semibold transition-colors">Zapisz</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ════════ WIDOK: USTAWIENIA ════════ -->
+  <div id="viewSettings" class="hidden px-4 pt-4">
+
+    <!-- Nagłówek -->
+    <div class="flex items-center gap-3 mb-4">
+      <button id="btnCloseSettings" class="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500 text-lg">←</button>
+      <h2 class="font-bold text-gray-800">Ustawienia</h2>
+    </div>
+
+    <!-- Wewnętrzne zakładki -->
+    <div class="flex gap-1 mb-4 bg-gray-100 rounded-xl p-1">
+      <button id="tabBtnUczniowie"
+        class="flex-1 py-2 rounded-lg text-sm font-semibold transition-colors bg-white text-blue-600 shadow-sm">
+        👥 Uczniowie
+      </button>
+      <button id="tabBtnKlasa"
+        class="flex-1 py-2 rounded-lg text-sm font-semibold transition-colors text-gray-500 hover:text-gray-700">
+        🏫 Klasa
+      </button>
+    </div>
+
+    <!-- ── Zakładka: Uczniowie ── -->
+    <div id="settingsTabUczniowie">
+
+      <!-- Przyciski edycji + licznik -->
+      <div class="flex justify-between items-center mb-3">
+        <span id="studentCount" class="text-sm text-gray-400"></span>
+        <div class="flex gap-2">
+          <button id="btnEditStudents"
+            class="px-3 py-1.5 rounded-xl border-2 border-orange-400 text-orange-600 text-sm font-semibold hover:bg-orange-50">EDYTUJ</button>
+          <button id="btnSaveStudents"
+            class="hidden px-3 py-1.5 rounded-xl bg-green-500 text-white text-sm font-semibold hover:bg-green-600">ZAPISZ</button>
+        </div>
+      </div>
+
+      <!-- Wnioski oczekujące -->
+      <div id="pendingRequestsSection" class="hidden mb-5">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="w-2 h-2 rounded-full bg-orange-400 animate-pulse"></span>
+          <h3 class="text-sm font-semibold text-orange-700">Oczekujące wnioski</h3>
+        </div>
+        <div id="pendingRequestsList" class="space-y-2"></div>
+      </div>
+
+      <!-- Tabela uczniów -->
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-xs text-gray-500 uppercase">
+              <tr>
+                <th class="px-3 py-3 text-left whitespace-nowrap">Imię Nazwisko</th>
+                <th class="px-3 py-3 text-left whitespace-nowrap">Email rodzica</th>
+                <th class="px-3 py-3 text-center whitespace-nowrap">Status</th>
+                <th class="px-3 py-3 text-left whitespace-nowrap hidden sm:table-cell">Tel. rodzica</th>
+                <th class="px-3 py-3 text-left whitespace-nowrap hidden sm:table-cell">Imię rodzica</th>
+                <th class="px-3 py-3 text-left whitespace-nowrap hidden sm:table-cell">Od kiedy</th>
+                <th id="settingsDelCol" class="hidden px-3 py-3 text-center">✕</th>
+              </tr>
+            </thead>
+            <tbody id="settingsBody" class="divide-y divide-gray-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Formularz dodawania ucznia (edit mode) -->
+      <div id="addStudentForm" class="hidden bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <h4 class="font-semibold text-gray-800 mb-3 text-sm">➕ Dodaj ucznia</h4>
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <input type="text" id="sFirst" placeholder="Imię *"
+            class="border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+          <input type="text" id="sLast" placeholder="Nazwisko *"
+            class="border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+        </div>
+        <input type="email" id="sEmail" placeholder="Email rodzica (Google) *"
+          class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-300">
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <input type="text" id="sParentName" placeholder="Imię rodzica"
+            class="border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+          <input type="tel" id="sPhone" placeholder="Tel. rodzica"
+            class="border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+        </div>
+        <input type="date" id="sEnrolled"
+          class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-300"
+          title="Od kiedy w klasie">
+        <button id="btnDoAddStudent"
+          class="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-xl py-2 text-sm font-semibold transition-colors">
+          + Dodaj ucznia
+        </button>
+        <p id="addStudentMsg" class="text-xs text-center mt-2 hidden"></p>
+      </div>
+    </div><!-- /settingsTabUczniowie -->
+
+    <!-- ── Zakładka: Klasa ── -->
+    <div id="settingsTabKlasa" class="hidden">
+
+      <!-- Lista klas -->
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
+        <div class="px-4 py-3 border-b border-gray-100">
+          <h3 class="font-semibold text-gray-800 text-sm">Klasy / Roczniki</h3>
+        </div>
+        <div id="classesList" class="divide-y divide-gray-100"></div>
+      </div>
+
+      <!-- Formularz dodawania klasy -->
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <h4 class="font-semibold text-gray-800 mb-3 text-sm">➕ Dodaj nową klasę</h4>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Rok szkolny *</label>
+            <input type="text" id="ncYear" placeholder="np. 2026-2027"
+              class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Nazwa (opcjonalnie)</label>
+            <input type="text" id="ncClassLabel" placeholder="np. Klasa 2 – zostanie wyliczona automatycznie"
+              class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+          </div>
+          <button id="btnDoAddClass"
+            class="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-xl py-2 text-sm font-semibold transition-colors">
+            + Dodaj klasę
+          </button>
+          <p id="addClassMsg" class="text-xs text-center hidden"></p>
+        </div>
+      </div>
+    </div><!-- /settingsTabKlasa -->
+
+  </div>
+
+</div><!-- /appContent -->
+
+<!-- ══════════════════════════════════════════════════════
+     PASEK NARZĘDZI (dolny, tylko widok główny z konkretną składką)
+══════════════════════════════════════════════════════ -->
+<div id="bottomToolbar" class="hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-20">
+  <div class="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+    <!-- Lewy: dodaj ucznia (edit mode) -->
+    <button id="tbAddStudent"
+      class="hidden w-10 h-10 rounded-full border-2 border-dashed border-blue-400 text-blue-500 flex items-center justify-center font-bold text-xl hover:bg-blue-50 transition-colors">
+      +
+    </button>
+    <div id="tbLeftPlaceholder" class="w-10"></div>
+    <!-- Środek: EDYTUJ / ZAPISZ -->
+    <div class="flex gap-3">
+      <button id="tbEdit"
+        class="px-6 py-2 rounded-xl border-2 border-orange-400 text-orange-600 font-semibold text-sm hover:bg-orange-50 transition-colors">
+        EDYTUJ
+      </button>
+      <button id="tbSave"
+        class="hidden px-6 py-2 rounded-xl bg-green-500 hover:bg-green-600 text-white font-semibold text-sm transition-colors">
+        ZAPISZ
+      </button>
+    </div>
+    <!-- Prawy: placeholder (w przyszłości: usuń ucznia z wypisu) -->
+    <div class="w-10"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     MODAL: Oznacz płatność
+══════════════════════════════════════════════════════ -->
+<div id="pmtModal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+    <h3 id="pmtTitle" class="font-bold text-gray-800 mb-1"></h3>
+    <p id="pmtSubtitle" class="text-gray-500 text-sm mb-4"></p>
+    <div id="pmtPaidFields">
+      <label class="block text-sm font-medium text-gray-700 mb-1">Data wpłaty *</label>
+      <input type="date" id="pmtDate"
+        class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-300">
+      <label class="block text-sm font-medium text-gray-700 mb-1">Notatka (opcjonalnie)</label>
+      <input type="text" id="pmtNote" placeholder="np. przelew, gotówka"
+        class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-blue-300">
+    </div>
+    <div id="pmtUnpaidMsg" class="hidden mb-5">
+      <p class="text-sm text-orange-600 bg-orange-50 rounded-xl p-3">Czy na pewno cofnąć tę płatność?</p>
+    </div>
+    <div class="flex gap-3">
+      <button id="pmtCancel" class="flex-1 border border-gray-300 rounded-xl py-2.5 text-gray-700 text-sm">Anuluj</button>
+      <button id="pmtConfirm" class="flex-1 rounded-xl py-2.5 text-white text-sm font-semibold"></button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     MODAL: Dodaj ucznia do tej składki
+══════════════════════════════════════════════════════ -->
+<div id="addToContribModal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+    <h3 class="font-bold text-gray-800 mb-1">Dodaj ucznia do składki</h3>
+    <p class="text-gray-500 text-sm mb-4">Wybierz ucznia, który dołącza do tej składki:</p>
+    <div id="addToContribList" class="space-y-1 max-h-60 overflow-y-auto mb-4"></div>
+    <button id="addToContribClose" class="w-full border border-gray-300 rounded-xl py-2.5 text-gray-700 text-sm">Anuluj</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     MODAL: Potwierdź wniosek rodzica
+══════════════════════════════════════════════════════ -->
+<div id="approveModal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+    <h3 class="font-bold text-gray-800 mb-1">Zatwierdź wniosek</h3>
+    <p class="text-gray-500 text-sm mb-4">Rodzic chce dołączyć do klasy i sprawdzać składki swojego dziecka.</p>
+    <div id="approveInfo" class="bg-blue-50 rounded-xl p-3 mb-4 text-sm text-blue-800 space-y-1"></div>
+    <label class="block text-sm font-medium text-gray-700 mb-2">Przypisz do ucznia:</label>
+    <select id="approveStudentSelect"
+      class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-blue-300">
+      <option value="">-- wybierz ucznia --</option>
+    </select>
+    <div class="flex gap-3">
+      <button id="approveCancelBtn" class="flex-1 border border-gray-300 rounded-xl py-2.5 text-gray-700 text-sm">Anuluj</button>
+      <button id="approveConfirmBtn"
+        class="flex-1 bg-green-500 hover:bg-green-600 text-white rounded-xl py-2.5 text-sm font-semibold">Zatwierdź</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     MODAL: Usuń / cofnij
+══════════════════════════════════════════════════════ -->
+<div id="deleteModal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
+    <div class="text-4xl mb-3">⚠️</div>
+    <h3 id="deleteTitle" class="font-bold text-gray-800 mb-2"></h3>
+    <p id="deleteMsg" class="text-gray-500 text-sm mb-6"></p>
+    <div class="flex gap-3">
+      <button id="deleteCancelBtn" class="flex-1 border border-gray-300 rounded-xl py-2.5 text-gray-700 text-sm">Anuluj</button>
+      <button id="deleteConfirmBtn" class="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-xl py-2.5 text-sm font-semibold">Usuń</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db   = firebase.firestore();
+
+  // ── Konfiguracja ──────────────────────────────────────
+  const STARTING_YEAR  = "2025-2026";
+  const STARTING_CLASS = 1;
+
+  // ── Helpers ───────────────────────────────────────────
+  function currentSchoolYear() {
+    const d = new Date(), m = d.getMonth()+1, y = d.getFullYear();
+    return m >= 9 ? `${y}-${y+1}` : `${y-1}-${y}`;
+  }
+  function getClassLabel(sy) {
+    const [sa] = STARTING_YEAR.split('-').map(Number);
+    const [ya] = sy.split('-').map(Number);
+    const g = STARTING_CLASS + (ya - sa);
+    return (g >= 1 && g <= 8) ? `Kl.${g}` : sy;
+  }
+  function fmtYear(sy) { const [a,b] = sy.split('-'); return `${a}/${b}`; }
+  function fmtDate(ts) {
+    if (!ts) return '—';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleDateString('pl-PL', {day:'2-digit',month:'2-digit',year:'numeric'});
+  }
+  function fmtDateShort(ts) {
+    if (!ts) return '?';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleDateString('pl-PL', {day:'2-digit',month:'2-digit'});
+  }
+  function todayISO() { return new Date().toISOString().split('T')[0]; }
+  function pmtKey(sId,cId) { return `${sId}_${cId}`; }
+
+  // ── Stan ──────────────────────────────────────────────
+  let G = {
+    year: currentSchoolYear(),
+    view: 'main',          // 'main' | 'newContrib' | 'settings'
+    contribId: 'ALL',      // 'ALL' lub konkretne ID
+    edit: false,
+    settingsTab: 'uczniowie', // 'uczniowie' | 'klasa'
+    students: [],          // {id, firstName, lastName, parentEmails, parentName, parentPhone, enrolledFrom}
+    contribs: [],          // {id, name, transferTitle, amount, dueDate, active}
+    payments: {},          // key: studentId_contribId
+    classes: [],           // {id, label, schoolYear}
+    pendingReqs: [],       // {id, uid, email, childFirstName, childLastName, status}
+    pendingDel: null,
+    pendingApprove: null
+  };
+
+  // ── Nawigacja widoków ─────────────────────────────────
+  function showView(v) {
+    G.view = v;
+    G.edit = false;
+    document.getElementById('viewMain').classList.toggle('hidden', v !== 'main');
+    document.getElementById('viewNewContrib').classList.toggle('hidden', v !== 'newContrib');
+    document.getElementById('viewSettings').classList.toggle('hidden', v !== 'settings');
+    document.getElementById('bottomToolbar').classList.toggle('hidden', v !== 'main' || G.contribId === 'ALL');
+    if (v === 'main')       renderMain();
+    if (v === 'settings')   renderSettings();
+    if (v === 'newContrib') renderNewContrib();
+  }
+
+  // ── Zakładki lat ──────────────────────────────────────
+  function buildYearTabs() {
+    const el = document.getElementById('yearTabs');
+    el.innerHTML = '';
+    const years = G.classes.length
+      ? G.classes.map(c => c.schoolYear)
+      : [currentSchoolYear()];
+    years.forEach(sy => {
+      const btn = document.createElement('button');
+      btn.textContent = getClassLabel(sy);
+      btn.title = fmtYear(sy);
+      btn.className = `flex-shrink-0 px-3 py-1.5 rounded-xl text-sm font-semibold transition-colors ${
+        sy === G.year ? 'bg-blue-500 text-white' : 'text-gray-600 hover:bg-gray-100'
+      }`;
+      btn.onclick = () => { G.year = sy; G.contribId = 'ALL'; loadData(); };
+      el.appendChild(btn);
+    });
+  }
+
+  // ── Ładowanie danych ──────────────────────────────────
+  async function loadData() {
+    document.getElementById('loadingView').classList.remove('hidden');
+    document.getElementById('appContent').classList.add('hidden');
+
+    const [sSnap, cSnap, pSnap, rSnap, clSnap] = await Promise.all([
+      db.collection('students').where('active','==',true).orderBy('lastName').orderBy('firstName').get(),
+      db.collection('contributions').where('schoolYear','==',G.year).where('active','==',true).orderBy('dueDate','asc').get(),
+      db.collection('payments').where('schoolYear','==',G.year).get(),
+      db.collection('requests').where('status','==','pending').get(),
+      db.collection('classes').orderBy('schoolYear','asc').get()
+    ]);
+
+    G.students  = sSnap.docs.map(d => ({id:d.id,...d.data()}));
+    G.contribs  = cSnap.docs.map(d => ({id:d.id,...d.data()}));
+    G.payments  = {};
+    pSnap.docs.forEach(d => { G.payments[d.id] = d.data(); });
+    G.pendingReqs = rSnap.docs.map(d => ({id:d.id,...d.data()}));
+    G.classes   = clSnap.docs.map(d => ({id:d.id,...d.data()}));
+
+    document.getElementById('loadingView').classList.add('hidden');
+    document.getElementById('appContent').classList.remove('hidden');
+    buildYearTabs();
+    showView(G.view);
+  }
+
+  // ══════════════════════════════════════════════════════
+  // WIDOK GŁÓWNY
+  // ══════════════════════════════════════════════════════
+  function renderMain() {
+    renderChips();
+    if (G.contribId === 'ALL') {
+      renderMatrix();
+      document.getElementById('bottomToolbar').classList.add('hidden');
+    } else {
+      renderContribDetail();
+      document.getElementById('bottomToolbar').classList.remove('hidden');
+      renderToolbar();
+    }
+  }
+
+  function renderChips() {
+    const el = document.getElementById('contribChips');
+    el.innerHTML = '';
+
+    const allChip = makeChip('ALL', 'ALL',
+      G.contribId === 'ALL' ? 'orange' : 'gray');
+    el.appendChild(allChip);
+
+    G.contribs.forEach(c => {
+      const participants = G.students.filter(s => G.payments[pmtKey(s.id,c.id)] !== undefined);
+      const paidCnt = participants.filter(s => G.payments[pmtKey(s.id,c.id)]?.paid).length;
+      let color = 'gray';
+      if (G.contribId === c.id) color = 'orange';
+      else if (participants.length > 0 && paidCnt === participants.length) color = 'green';
+      else if (paidCnt < participants.length) color = 'red';
+      el.appendChild(makeChip(c.id, fmtDateShort(c.dueDate), color));
+    });
+  }
+
+  function makeChip(id, label, color) {
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    const styles = {
+      orange: 'border-orange-400 text-orange-700 bg-orange-50 ring-2 ring-orange-200',
+      green:  'border-green-400 text-green-700 bg-green-50',
+      red:    'border-red-400 text-red-700 bg-red-50',
+      gray:   'border-gray-300 text-gray-600 bg-white'
+    };
+    btn.className = `px-3 py-1.5 rounded-full text-sm font-semibold border-2 cursor-pointer transition-all flex-shrink-0 ${styles[color]}`;
+    btn.onclick = () => { G.contribId = id; renderMain(); };
+    return btn;
+  }
+
+  // ── Widok: konkretna składka ──────────────────────────
+  function renderContribDetail() {
+    const c = G.contribs.find(x => x.id === G.contribId);
+    if (!c) { document.getElementById('mainContent').innerHTML = '<p class="text-gray-400 text-center py-8">Składka nie znaleziona.</p>'; return; }
+
+    const participants = G.students.filter(s => G.payments[pmtKey(s.id,c.id)] !== undefined);
+    const paidCnt = participants.filter(s => G.payments[pmtKey(s.id,c.id)]?.paid).length;
+
+    let rows = participants.map(s => {
+      const pmt  = G.payments[pmtKey(s.id,c.id)];
+      const paid = pmt && pmt.paid;
+      return `
+        <tr class="hover:bg-gray-50 transition-colors">
+          <td class="px-4 py-3.5 font-medium text-gray-800 text-sm">${s.lastName} ${s.firstName}</td>
+          <td class="px-4 py-3.5 text-center">
+            <button onclick="openPmtModal('${s.id}','${c.id}',${paid})"
+              class="text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${
+                paid
+                ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                : 'bg-red-100 text-red-700 hover:bg-red-200'
+              }">
+              ${paid ? '✓ OPŁACONA' : '✗ ZALEGA'}
+            </button>
+            ${paid && pmt.paidDate ? `<div class="text-xs text-green-600 mt-0.5">${fmtDate(pmt.paidDate)}</div>` : ''}
+          </td>
+          ${G.edit ? `<td class="px-4 py-3.5 text-center"><button onclick="removeFromContrib('${s.id}')" class="text-red-300 hover:text-red-500 transition-colors font-bold">✕</button></td>` : ''}
+        </tr>`;
+    }).join('');
+
+    if (!participants.length) {
+      rows = `<tr><td colspan="3" class="px-4 py-8 text-center text-gray-400 text-sm">Brak uczniów w tej składce</td></tr>`;
+    }
+
+    document.getElementById('mainContent').innerHTML = `
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
+        <div class="px-4 py-4 bg-blue-50 border-b border-blue-100">
+          <div class="flex justify-between items-start gap-3">
+            <div>
+              <h3 class="font-bold text-gray-900">${c.name}</h3>
+              ${c.transferTitle ? `<div class="text-sm text-blue-700 mt-0.5">Tytuł przelewu: <span class="font-mono font-semibold">${c.transferTitle}</span></div>` : ''}
+            </div>
+            <div class="text-right flex-shrink-0">
+              <div class="font-bold text-blue-700">${c.amount} zł</div>
+              <div class="text-xs text-gray-500">termin: ${fmtDate(c.dueDate)}</div>
+            </div>
+          </div>
+          <div class="mt-2 flex items-center gap-2">
+            <div class="flex-1 bg-gray-200 rounded-full h-1.5">
+              <div class="bg-green-500 h-1.5 rounded-full" style="width:${participants.length ? Math.round(paidCnt/participants.length*100) : 0}%"></div>
+            </div>
+            <span class="text-xs font-semibold text-blue-700">${paidCnt}/${participants.length}</span>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="bg-gray-50 text-xs text-gray-500 uppercase">
+              <tr>
+                <th class="px-4 py-2.5 text-left">Uczeń</th>
+                <th class="px-4 py-2.5 text-center">Status</th>
+                ${G.edit ? '<th class="px-4 py-2.5 text-center">Usuń</th>' : ''}
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">${rows}</tbody>
+          </table>
+        </div>
+        ${G.edit ? `
+        <div class="px-4 py-3 border-t border-gray-100 text-center">
+          <button onclick="openAddToContribModal()" class="text-sm text-blue-500 hover:text-blue-700 font-medium">
+            + Dodaj ucznia do tej składki
+          </button>
+        </div>` : ''}
+      </div>
+      ${G.edit ? `
+      <div class="text-center pb-2">
+        <button onclick="deleteContrib('${c.id}','${c.name}')"
+          class="text-xs text-red-400 hover:text-red-600 underline">Usuń tę składkę</button>
+      </div>` : ''}
+    `;
+  }
+
+  function renderToolbar() {
+    const tbEdit = document.getElementById('tbEdit');
+    const tbSave = document.getElementById('tbSave');
+    const tbAdd  = document.getElementById('tbAddStudent');
+    const tbLP   = document.getElementById('tbLeftPlaceholder');
+
+    if (G.edit) {
+      tbEdit.classList.add('hidden');    tbSave.classList.remove('hidden');
+      tbAdd.classList.remove('hidden');  tbLP.classList.add('hidden');
+    } else {
+      tbEdit.classList.remove('hidden'); tbSave.classList.add('hidden');
+      tbAdd.classList.add('hidden');     tbLP.classList.remove('hidden');
+    }
+  }
+
+  // ── Widok: macierz ALL ────────────────────────────────
+  function renderMatrix() {
+    if (!G.students.length || !G.contribs.length) {
+      document.getElementById('mainContent').innerHTML = `
+        <div class="text-center py-16 text-gray-400">
+          <div class="text-5xl mb-3">📋</div>
+          <p class="text-sm">Dodaj składki i uczniów, aby zobaczyć macierz płatności.</p>
+        </div>`;
+      return;
+    }
+
+    let thead = '<tr class="bg-gray-50 text-xs text-gray-500 uppercase"><th class="sticky-col px-3 py-3 text-left min-w-[140px]">Uczeń</th>';
+    G.contribs.forEach(c => {
+      thead += `<th class="px-2 py-3 text-center min-w-[80px]"><div class="font-semibold truncate max-w-[75px] mx-auto text-gray-700" title="${c.name}">${c.name}</div><div class="text-blue-500 font-normal">${c.amount}zł</div><div class="text-gray-400 font-normal">${fmtDateShort(c.dueDate)}</div></th>`;
+    });
+    thead += '<th class="px-2 py-3 text-center">Σ</th></tr>';
+
+    let tbody = '';
+    G.students.forEach(s => {
+      let cells = '';
+      let paidCnt = 0;
+      G.contribs.forEach(c => {
+        const pmt = G.payments[pmtKey(s.id,c.id)];
+        const paid = pmt && pmt.paid;
+        if (paid) paidCnt++;
+        const inContrib = pmt !== undefined;
+        cells += `<td class="px-2 py-3 text-center">
+          ${inContrib
+            ? `<button onclick="openPmtModal('${s.id}','${c.id}',${paid})"
+                class="w-12 h-8 rounded-lg text-xs font-bold transition-all hover:scale-105 ${paid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}">
+                ${paid ? '✓' : '✗'}
+              </button>`
+            : `<span class="text-gray-300 text-xs">—</span>`}
+        </td>`;
+      });
+      tbody += `<tr class="border-t border-gray-100 hover:bg-gray-50">
+        <td class="sticky-col px-3 py-3 text-sm font-medium text-gray-800">${s.lastName} ${s.firstName}</td>
+        ${cells}
+        <td class="px-2 py-3 text-center text-xs font-semibold ${paidCnt===G.contribs.length?'text-green-600':'text-gray-500'}">${paidCnt}/${G.contribs.length}</td>
+      </tr>`;
+    });
+
+    // Wiersz sum
+    let sumRow = '<tr class="border-t-2 border-gray-300 bg-gray-50 text-xs font-semibold text-gray-600"><td class="sticky-col px-3 py-2 bg-gray-50">Razem:</td>';
+    G.contribs.forEach(c => {
+      const cnt = G.students.filter(s => G.payments[pmtKey(s.id,c.id)]?.paid).length;
+      const tot = G.students.filter(s => G.payments[pmtKey(s.id,c.id)] !== undefined).length;
+      sumRow += `<td class="px-2 py-2 text-center">${cnt}/${tot}</td>`;
+    });
+    sumRow += '<td></td></tr>';
+
+    document.getElementById('mainContent').innerHTML = `
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="text-sm"><thead>${thead}</thead><tbody>${tbody}${sumRow}</tbody></table>
+        </div>
+      </div>`;
+  }
+
+  // ══════════════════════════════════════════════════════
+  // MODAL: Płatność
+  // ══════════════════════════════════════════════════════
+  let pendingPmt = null;
+
+  function openPmtModal(sId, cId, currentlyPaid) {
+    const s = G.students.find(x => x.id === sId);
+    const c = G.contribs.find(x => x.id === cId);
+    if (!s || !c) return;
+    pendingPmt = {sId, cId, markAsPaid: !currentlyPaid};
+    document.getElementById('pmtTitle').textContent = `${s.lastName} ${s.firstName}`;
+    document.getElementById('pmtSubtitle').textContent = `${c.name} – ${c.amount} zł`;
+    const paidF = document.getElementById('pmtPaidFields');
+    const unpaidF = document.getElementById('pmtUnpaidMsg');
+    const confirmBtn = document.getElementById('pmtConfirm');
+    if (!currentlyPaid) {
+      paidF.classList.remove('hidden'); unpaidF.classList.add('hidden');
+      document.getElementById('pmtDate').value = todayISO();
+      document.getElementById('pmtNote').value = '';
+      confirmBtn.textContent = '✓ Oznacz jako opłaconą';
+      confirmBtn.className = confirmBtn.className.replace(/bg-\S+/g,'') + ' bg-green-500 hover:bg-green-600';
+    } else {
+      paidF.classList.add('hidden'); unpaidF.classList.remove('hidden');
+      confirmBtn.textContent = '✗ Cofnij płatność';
+      confirmBtn.className = confirmBtn.className.replace(/bg-\S+/g,'') + ' bg-orange-500 hover:bg-orange-600';
+    }
+    document.getElementById('pmtModal').classList.remove('hidden');
+  }
+
+  document.getElementById('pmtCancel').onclick = () => {
+    document.getElementById('pmtModal').classList.add('hidden'); pendingPmt = null;
+  };
+  document.getElementById('pmtConfirm').onclick = async () => {
+    if (!pendingPmt) return;
+    const {sId, cId, markAsPaid} = pendingPmt;
+    const c = G.contribs.find(x => x.id === cId);
+    let paidDate = null, note = '';
+    if (markAsPaid) {
+      const dv = document.getElementById('pmtDate').value;
+      if (!dv) { alert('Wybierz datę wpłaty.'); return; }
+      paidDate = firebase.firestore.Timestamp.fromDate(new Date(dv));
+      note = document.getElementById('pmtNote').value.trim();
+    }
+    try {
+      const key = pmtKey(sId, cId);
+      await db.collection('payments').doc(key).set({
+        studentId: sId, contribId: cId, schoolYear: G.year,
+        paid: markAsPaid, paidDate: markAsPaid ? paidDate : null,
+        note: markAsPaid ? note : '', amount: c?.amount || 0,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, {merge:true});
+      G.payments[key] = {studentId:sId, contribId:cId, schoolYear:G.year,
+        paid:markAsPaid, paidDate:markAsPaid?paidDate:null, note:markAsPaid?note:''};
+      document.getElementById('pmtModal').classList.add('hidden');
+      pendingPmt = null;
+      renderMain();
+    } catch(e) { alert('Błąd zapisu: ' + e.message); }
+  };
+
+  // ══════════════════════════════════════════════════════
+  // Dodaj/usuń ucznia z konkretnej składki
+  // ══════════════════════════════════════════════════════
+  function openAddToContribModal() {
+    const c = G.contribs.find(x => x.id === G.contribId);
+    if (!c) return;
+    const notIn = G.students.filter(s => G.payments[pmtKey(s.id,c.id)] === undefined);
+    const list = document.getElementById('addToContribList');
+    list.innerHTML = notIn.length ? '' : '<p class="text-gray-400 text-sm text-center py-4">Wszyscy uczniowie są już w tej składce.</p>';
+    notIn.forEach(s => {
+      const btn = document.createElement('button');
+      btn.textContent = `${s.lastName} ${s.firstName}`;
+      btn.className = 'w-full text-left px-3 py-2.5 rounded-xl hover:bg-blue-50 text-sm text-gray-800 transition-colors';
+      btn.onclick = () => addStudentToContrib(s.id, c);
+      list.appendChild(btn);
+    });
+    document.getElementById('addToContribModal').classList.remove('hidden');
+  }
+
+  document.getElementById('addToContribClose').onclick = () =>
+    document.getElementById('addToContribModal').classList.add('hidden');
+
+  async function addStudentToContrib(sId, c) {
+    const key = pmtKey(sId, c.id);
+    await db.collection('payments').doc(key).set({
+      studentId:sId, contribId:c.id, schoolYear:G.year,
+      paid:false, paidDate:null, note:'', amount:c.amount,
+      updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+    });
+    G.payments[key] = {studentId:sId, contribId:c.id, schoolYear:G.year, paid:false, paidDate:null, note:''};
+    document.getElementById('addToContribModal').classList.add('hidden');
+    renderMain();
+  }
+
+  async function removeFromContrib(sId) {
+    if (!confirm('Usunąć tego ucznia z tej składki?')) return;
+    const key = pmtKey(sId, G.contribId);
+    await db.collection('payments').doc(key).delete();
+    delete G.payments[key];
+    renderMain();
+  }
+
+  // ── Toolbar – edit/save ────────────────────────────────
+  document.getElementById('tbEdit').onclick = () => { G.edit = true; renderMain(); };
+  document.getElementById('tbSave').onclick = () => { G.edit = false; renderMain(); };
+  document.getElementById('tbAddStudent').onclick = openAddToContribModal;
+
+  // ══════════════════════════════════════════════════════
+  // WIDOK: NOWA SKŁADKA
+  // ══════════════════════════════════════════════════════
+  function renderNewContrib() {
+    const list = document.getElementById('ncStudentList');
+    list.innerHTML = '';
+    G.students.forEach(s => {
+      const row = document.createElement('div');
+      row.className = 'flex items-center gap-3 px-3 py-2.5';
+      row.innerHTML = `
+        <input type="checkbox" id="nc_${s.id}" checked value="${s.id}"
+          class="w-4 h-4 rounded accent-blue-500">
+        <label for="nc_${s.id}" class="text-sm text-gray-700 flex-1 cursor-pointer">
+          ${s.lastName} ${s.firstName}
+        </label>`;
+      list.appendChild(row);
+    });
+    let allChecked = true;
+    document.getElementById('ncToggleAll').onclick = () => {
+      allChecked = !allChecked;
+      list.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = allChecked);
+      document.getElementById('ncToggleAll').textContent = allChecked ? 'Odznacz wszystkich' : 'Zaznacz wszystkich';
+    };
+  }
+
+  document.getElementById('newContribForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type=submit]');
+    const msg = document.getElementById('ncMsg');
+    const name     = document.getElementById('ncName').value.trim();
+    const transfer = document.getElementById('ncTransfer').value.trim();
+    const amount   = parseInt(document.getElementById('ncAmount').value);
+    const dueStr   = document.getElementById('ncDue').value;
+    if (!name || !transfer || !amount) return;
+
+    const selected = [...document.querySelectorAll('#ncStudentList input:checked')].map(cb => cb.value);
+    if (!selected.length) { alert('Wybierz przynajmniej jednego ucznia.'); return; }
+
+    btn.disabled = true; btn.textContent = 'Zapisuję…';
+    msg.classList.add('hidden');
+    try {
+      const dueDate = dueStr ? firebase.firestore.Timestamp.fromDate(new Date(dueStr)) : null;
+      const ref = await db.collection('contributions').add({
+        name, transferTitle: transfer, description: '', amount, dueDate,
+        schoolYear: G.year, active: true,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      const batch = db.batch();
+      selected.forEach(sId => {
+        batch.set(db.collection('payments').doc(pmtKey(sId,ref.id)), {
+          studentId:sId, contribId:ref.id, schoolYear:G.year,
+          paid:false, paidDate:null, note:'', amount,
+          updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+        });
+      });
+      await batch.commit();
+      e.target.reset();
+      await loadData();
+      G.contribId = ref.id;
+      showView('main');
+    } catch(err) {
+      msg.textContent = 'Błąd: ' + err.message;
+      msg.className = 'text-sm text-center text-red-600';
+      msg.classList.remove('hidden');
+      btn.disabled = false; btn.textContent = 'Zapisz';
+    }
+  };
+
+  ['btnCancelNew','btnCancelNew2'].forEach(id =>
+    document.getElementById(id).onclick = () => showView('main')
+  );
+
+  // ── Usuń składkę ──────────────────────────────────────
+  function deleteContrib(id, name) {
+    G.pendingDel = {type:'contrib', id};
+    document.getElementById('deleteTitle').textContent = 'Usuń składkę';
+    document.getElementById('deleteMsg').textContent = `„${name}" zostanie usunięta. Historia płatności zostanie zachowana.`;
+    document.getElementById('deleteModal').classList.remove('hidden');
+  }
+
+  // ══════════════════════════════════════════════════════
+  // WIDOK: USTAWIENIA (lista uczniów + zarządzanie klasami)
+  // ══════════════════════════════════════════════════════
+  let settingsEdit = false;
+
+  function renderSettings() {
+    switchSettingsTab(G.settingsTab);
+  }
+
+  function switchSettingsTab(tab) {
+    G.settingsTab = tab;
+    const activeClass   = 'bg-white text-blue-600 shadow-sm';
+    const inactiveClass = 'text-gray-500 hover:text-gray-700';
+    const tabUBtn = document.getElementById('tabBtnUczniowie');
+    const tabKBtn = document.getElementById('tabBtnKlasa');
+    const tabU    = document.getElementById('settingsTabUczniowie');
+    const tabK    = document.getElementById('settingsTabKlasa');
+
+    if (tab === 'uczniowie') {
+      tabUBtn.className = `flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${activeClass}`;
+      tabKBtn.className = `flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${inactiveClass}`;
+      tabU.classList.remove('hidden');
+      tabK.classList.add('hidden');
+      // Reset edit state
+      settingsEdit = false;
+      document.getElementById('btnEditStudents').classList.remove('hidden');
+      document.getElementById('btnSaveStudents').classList.add('hidden');
+      document.getElementById('addStudentForm').classList.add('hidden');
+      document.getElementById('settingsDelCol').classList.add('hidden');
+      document.querySelectorAll('.settings-del-cell').forEach(el => el.classList.add('hidden'));
+      renderPendingRequests();
+      renderStudentsTable();
+      document.getElementById('studentCount').textContent = `(${G.students.length})`;
+    } else {
+      tabUBtn.className = `flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${inactiveClass}`;
+      tabKBtn.className = `flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${activeClass}`;
+      tabU.classList.add('hidden');
+      tabK.classList.remove('hidden');
+      renderClassesTab();
+    }
+  }
+
+  function renderClassesTab() {
+    const list = document.getElementById('classesList');
+    if (!G.classes.length) {
+      list.innerHTML = '<p class="px-4 py-6 text-center text-gray-400 text-sm">Brak klas. Dodaj pierwszą klasę poniżej.</p>';
+      return;
+    }
+    list.innerHTML = '';
+    G.classes.forEach(cl => {
+      const div = document.createElement('div');
+      div.className = 'px-4 py-3 flex justify-between items-center';
+      const label = cl.label || getClassLabel(cl.schoolYear);
+      div.innerHTML = `
+        <div>
+          <div class="font-semibold text-gray-800 text-sm">${label}</div>
+          <div class="text-xs text-gray-400">${fmtYear(cl.schoolYear)}</div>
+        </div>
+        <span class="text-xs px-2.5 py-1 rounded-full font-semibold ${
+          cl.schoolYear === G.year
+          ? 'bg-blue-100 text-blue-700'
+          : 'bg-gray-100 text-gray-400'
+        }">${cl.schoolYear === G.year ? 'Aktywna' : fmtYear(cl.schoolYear)}</span>`;
+      list.appendChild(div);
+    });
+  }
+
+  document.getElementById('btnDoAddClass').onclick = async () => {
+    const yearVal  = document.getElementById('ncYear').value.trim();
+    const labelVal = document.getElementById('ncClassLabel').value.trim();
+    const msg      = document.getElementById('addClassMsg');
+
+    if (!yearVal || !/^\d{4}-\d{4}$/.test(yearVal)) {
+      msg.textContent = 'Podaj rok w formacie RRRR-RRRR, np. 2026-2027.';
+      msg.className = 'text-xs text-center text-red-600'; msg.classList.remove('hidden'); return;
+    }
+    if (G.classes.find(c => c.schoolYear === yearVal)) {
+      msg.textContent = 'Ta klasa już istnieje.';
+      msg.className = 'text-xs text-center text-red-600'; msg.classList.remove('hidden'); return;
+    }
+    const label = labelVal || getClassLabel(yearVal);
+    msg.textContent = 'Zapisuję…'; msg.className = 'text-xs text-center text-gray-400'; msg.classList.remove('hidden');
+    try {
+      await db.collection('classes').add({
+        label, schoolYear: yearVal,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      document.getElementById('ncYear').value      = '';
+      document.getElementById('ncClassLabel').value = '';
+      msg.textContent = '✓ Klasa dodana!'; msg.className = 'text-xs text-center text-green-600';
+      G.year = yearVal; // przełącz na nową klasę
+      G.contribId = 'ALL';
+      G.settingsTab = 'klasa';
+      await loadData();
+      showView('settings');
+    } catch(e) {
+      msg.textContent = 'Błąd: ' + e.message; msg.className = 'text-xs text-center text-red-600';
+    }
+  };
+
+  function renderPendingRequests() {
+    const section = document.getElementById('pendingRequestsSection');
+    const list    = document.getElementById('pendingRequestsList');
+    if (!G.pendingReqs.length) { section.classList.add('hidden'); return; }
+    section.classList.remove('hidden');
+    list.innerHTML = '';
+    G.pendingReqs.forEach(req => {
+      const div = document.createElement('div');
+      div.className = 'bg-orange-50 border border-orange-200 rounded-xl p-3 flex items-start justify-between gap-3';
+      div.innerHTML = `
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-semibold text-gray-800">Dziecko: ${req.childFirstName} ${req.childLastName}</div>
+          <div class="text-xs text-gray-500 truncate mt-0.5">Rodzic: ${req.email}</div>
+        </div>
+        <button onclick="openApproveModal('${req.id}')"
+          class="flex-shrink-0 px-3 py-1.5 bg-orange-400 hover:bg-orange-500 text-white text-xs font-bold rounded-xl transition-colors">
+          Zatwierdź
+        </button>`;
+      list.appendChild(div);
+    });
+  }
+
+  function renderStudentsTable() {
+    const tbody = document.getElementById('settingsBody');
+    tbody.innerHTML = '';
+    G.students.forEach(s => {
+      // Status rodzica
+      const hasEmail = s.parentEmails && s.parentEmails.length > 0;
+      let statusHtml;
+      if (hasEmail) {
+        statusHtml = '<span class="text-xs font-bold px-2 py-1 rounded-full bg-green-100 text-green-700">Zatwierdzony</span>';
+      } else {
+        statusHtml = '<span class="text-xs font-bold px-2 py-1 rounded-full bg-gray-100 text-gray-500">Brak</span>';
+      }
+      const tr = document.createElement('tr');
+      tr.className = 'hover:bg-gray-50 transition-colors';
+      tr.innerHTML = `
+        <td class="px-3 py-3 text-sm font-medium text-gray-800 whitespace-nowrap">${s.lastName} ${s.firstName}</td>
+        <td class="px-3 py-3 text-xs text-gray-500 max-w-[120px]">
+          <div class="truncate">${(s.parentEmails||[]).join(', ') || '—'}</div>
+        </td>
+        <td class="px-3 py-3 text-center">${statusHtml}</td>
+        <td class="px-3 py-3 text-xs text-gray-500 hidden sm:table-cell">${s.parentPhone || '—'}</td>
+        <td class="px-3 py-3 text-xs text-gray-500 hidden sm:table-cell">${s.parentName || '—'}</td>
+        <td class="px-3 py-3 text-xs text-gray-500 hidden sm:table-cell">${s.enrolledFrom || '—'}</td>
+        <td class="hidden px-3 py-3 text-center settings-del-cell">
+          <button onclick="deleteStudent('${s.id}','${s.firstName} ${s.lastName}')"
+            class="text-red-300 hover:text-red-500 font-bold text-base transition-colors">✕</button>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  document.getElementById('btnEditStudents').onclick = () => {
+    settingsEdit = true;
+    document.getElementById('btnEditStudents').classList.add('hidden');
+    document.getElementById('btnSaveStudents').classList.remove('hidden');
+    document.getElementById('addStudentForm').classList.remove('hidden');
+    document.getElementById('settingsDelCol').classList.remove('hidden');
+    document.querySelectorAll('.settings-del-cell').forEach(el => el.classList.remove('hidden'));
+  };
+  document.getElementById('btnSaveStudents').onclick = () => renderSettings();
+
+  // ── Dodaj ucznia ──────────────────────────────────────
+  document.getElementById('btnDoAddStudent').onclick = async () => {
+    const firstName = document.getElementById('sFirst').value.trim();
+    const lastName  = document.getElementById('sLast').value.trim();
+    const email     = document.getElementById('sEmail').value.trim().toLowerCase();
+    const parentName= document.getElementById('sParentName').value.trim();
+    const phone     = document.getElementById('sPhone').value.trim();
+    const enrolled  = document.getElementById('sEnrolled').value;
+    const msg       = document.getElementById('addStudentMsg');
+
+    if (!firstName || !lastName || !email) {
+      msg.textContent = 'Imię, nazwisko i email są wymagane.';
+      msg.className = 'text-xs text-center mt-2 text-red-600'; msg.classList.remove('hidden'); return;
+    }
+    try {
+      msg.textContent = 'Zapisuję…'; msg.className = 'text-xs text-center mt-2 text-gray-400'; msg.classList.remove('hidden');
+      const ref = await db.collection('students').add({
+        firstName, lastName, parentEmails: [email],
+        parentName, parentPhone: phone,
+        enrolledFrom: enrolled || '', active: true,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      // Utwórz rekordy płatności dla bieżących składek
+      if (G.contribs.length) {
+        const batch = db.batch();
+        G.contribs.forEach(c => {
+          batch.set(db.collection('payments').doc(pmtKey(ref.id,c.id)), {
+            studentId:ref.id, contribId:c.id, schoolYear:G.year,
+            paid:false, paidDate:null, note:'', amount:c.amount,
+            updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+          });
+        });
+        await batch.commit();
+      }
+      ['sFirst','sLast','sEmail','sParentName','sPhone','sEnrolled'].forEach(id =>
+        document.getElementById(id).value = '');
+      msg.textContent = '✓ Uczeń dodany!'; msg.className = 'text-xs text-center mt-2 text-green-600';
+      await loadData();
+      showView('settings');
+    } catch(err) {
+      msg.textContent = 'Błąd: ' + err.message; msg.className = 'text-xs text-center mt-2 text-red-600';
+    }
+  };
+
+  // ── Usuń ucznia ───────────────────────────────────────
+  function deleteStudent(id, name) {
+    G.pendingDel = {type:'student', id};
+    document.getElementById('deleteTitle').textContent = 'Usuń ucznia';
+    document.getElementById('deleteMsg').textContent = `„${name}" zostanie usunięty z listy.`;
+    document.getElementById('deleteModal').classList.remove('hidden');
+  }
+
+  // ── Modal: zatwierdź wniosek ──────────────────────────
+  function openApproveModal(reqId) {
+    const req = G.pendingReqs.find(r => r.id === reqId);
+    if (!req) return;
+    G.pendingApprove = req;
+    document.getElementById('approveInfo').innerHTML = `
+      <div>📧 Email rodzica: <strong>${req.email}</strong></div>
+      <div>👦 Dziecko: <strong>${req.childFirstName} ${req.childLastName}</strong></div>`;
+    const sel = document.getElementById('approveStudentSelect');
+    sel.innerHTML = '<option value="">-- wybierz ucznia --</option>';
+    // Podsuguj pasującego ucznia (po nazwisku)
+    G.students.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = `${s.lastName} ${s.firstName}`;
+      // Zaznacz jeśli nazwy pasują
+      if (s.lastName.toLowerCase() === req.childLastName.toLowerCase() &&
+          s.firstName.toLowerCase() === req.childFirstName.toLowerCase()) {
+        opt.selected = true;
+      }
+      sel.appendChild(opt);
+    });
+    document.getElementById('approveModal').classList.remove('hidden');
+  }
+
+  document.getElementById('approveCancelBtn').onclick = () => {
+    document.getElementById('approveModal').classList.add('hidden'); G.pendingApprove = null;
+  };
+  document.getElementById('approveConfirmBtn').onclick = async () => {
+    const req = G.pendingApprove;
+    const studentId = document.getElementById('approveStudentSelect').value;
+    if (!req || !studentId) { alert('Wybierz ucznia.'); return; }
+    try {
+      const batch = db.batch();
+      // Dodaj email do ucznia
+      batch.update(db.collection('students').doc(studentId), {
+        parentEmails: firebase.firestore.FieldValue.arrayUnion(req.email)
+      });
+      // Zaktualizuj wniosek
+      batch.update(db.collection('requests').doc(req.uid), {
+        status: 'approved', studentId, approvedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      await batch.commit();
+      document.getElementById('approveModal').classList.add('hidden');
+      G.pendingApprove = null;
+      await loadData();
+      showView('settings');
+    } catch(e) { alert('Błąd: ' + e.message); }
+  };
+
+  // ── Modal: usuń ───────────────────────────────────────
+  document.getElementById('deleteCancelBtn').onclick = () => {
+    document.getElementById('deleteModal').classList.add('hidden'); G.pendingDel = null;
+  };
+  document.getElementById('deleteConfirmBtn').onclick = async () => {
+    if (!G.pendingDel) return;
+    try {
+      const col = G.pendingDel.type === 'student' ? 'students' : 'contributions';
+      const isContrib = G.pendingDel.type === 'contrib';
+      await db.collection(col).doc(G.pendingDel.id).update({active:false});
+      document.getElementById('deleteModal').classList.add('hidden');
+      G.pendingDel = null;
+      if (isContrib) G.contribId = 'ALL';
+      await loadData();
+    } catch(e) { alert('Błąd: ' + e.message); }
+  };
+
+  // ── Nawigacja ─────────────────────────────────────────
+  document.getElementById('btnSettings').onclick = () => { G.settingsTab = 'uczniowie'; showView('settings'); };
+  document.getElementById('btnNewContrib').onclick = () => showView('newContrib');
+  document.getElementById('btnCloseSettings').onclick = () => showView('main');
+  document.getElementById('tabBtnUczniowie').onclick = () => switchSettingsTab('uczniowie');
+  document.getElementById('tabBtnKlasa').onclick = () => switchSettingsTab('klasa');
+  document.getElementById('btnLogout').onclick = () =>
+    auth.signOut().then(() => window.location.href = 'index.html');
+
+  // ── Auth ──────────────────────────────────────────────
+  auth.onAuthStateChanged(async (user) => {
+    if (!user) { window.location.href = 'index.html'; return; }
+    try {
+      const uDoc = await db.collection('users').doc(user.uid).get();
+      if (!uDoc.exists || !uDoc.data().isAdmin) {
+        document.getElementById('loadingView').classList.add('hidden');
+        document.getElementById('accessDenied').classList.remove('hidden');
+        return;
+      }
+      await loadData();
+    } catch(e) { alert('Błąd: ' + e.message); }
+  });
+</script>
+</body>
+</html>

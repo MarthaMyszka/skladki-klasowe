@@ -1,0 +1,63 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+    function isLoggedIn() {
+      return request.auth != null;
+    }
+    function isParentOf(studentId) {
+      return isLoggedIn() &&
+             get(/databases/$(database)/documents/students/$(studentId)).data.parentEmails.hasAny([request.auth.token.email]);
+    }
+
+    // ── users ─────────────────────────────────────────────
+    match /users/{uid} {
+      allow read:  if request.auth != null && request.auth.uid == uid;
+      allow write: if isAdmin();
+    }
+
+    // ── students ──────────────────────────────────────────
+    match /students/{studentId} {
+      allow read:  if isAdmin() ||
+                      (isLoggedIn() &&
+                       resource.data.parentEmails.hasAny([request.auth.token.email]));
+      allow write: if isAdmin();
+    }
+
+    // ── contributions ─────────────────────────────────────
+    match /contributions/{contribId} {
+      allow read:  if isLoggedIn();
+      allow write: if isAdmin();
+    }
+
+    // ── payments ──────────────────────────────────────────
+    match /payments/{paymentId} {
+      allow read: if isAdmin() ||
+                     (isLoggedIn() &&
+                      isParentOf(resource.data.studentId));
+      allow write: if isAdmin();
+    }
+
+    // ── requests (wnioski rodziców) ───────────────────────
+    // Rodzic tworzy swój własny wniosek po pierwszym logowaniu.
+    // Admin widzi wszystkie wnioski i je zatwierdza.
+    match /requests/{uid} {
+      allow create: if request.auth != null && request.auth.uid == uid;
+      allow read:   if request.auth != null &&
+                       (request.auth.uid == uid || isAdmin());
+      allow update, delete: if isAdmin();
+    }
+
+    // ── classes (roczniki/klasy) ──────────────────────────
+    // Każdy zalogowany użytkownik widzi listę klas (potrzebne do zakładek).
+    // Tylko admin może tworzyć/edytować klasy.
+    match /classes/{classId} {
+      allow read:  if isLoggedIn();
+      allow write: if isAdmin();
+    }
+  }
+}
