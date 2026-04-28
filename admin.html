@@ -243,6 +243,10 @@
       </div>
     </div><!-- /settingsTabKlasa -->
 
+    <p class="text-center text-xs text-gray-400 py-4">
+      <a href="privacy.html" target="_blank" class="underline hover:text-gray-600">Klauzula informacyjna RODO</a>
+    </p>
+
   </div>
 
 </div><!-- /appContent -->
@@ -407,6 +411,7 @@
     d.textContent = v == null ? '' : String(v);
     return d.innerHTML;
   }
+  function escAttr(v) { return esc(v).replace(/"/g, '&quot;'); }
 
   // ── Stan ──────────────────────────────────────────────
   let G = {
@@ -543,7 +548,7 @@
       const paid = pmt && pmt.paid;
       return `
         <tr class="hover:bg-gray-50 transition-colors">
-          <td class="px-4 py-3.5 font-medium text-gray-800 text-sm">${s.lastName} ${s.firstName}</td>
+          <td class="px-4 py-3.5 font-medium text-gray-800 text-sm">${esc(s.lastName)} ${esc(s.firstName)}</td>
           <td class="px-4 py-3.5 text-center">
             <button onclick="openPmtModal('${s.id}','${c.id}',${paid})"
               class="text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${
@@ -568,8 +573,8 @@
         <div class="px-4 py-4 bg-blue-50 border-b border-blue-100">
           <div class="flex justify-between items-start gap-3">
             <div>
-              <h3 class="font-bold text-gray-900">${c.name}</h3>
-              ${c.transferTitle ? `<div class="text-sm text-blue-700 mt-0.5">Tytuł przelewu: <span class="font-mono font-semibold">${c.transferTitle}</span></div>` : ''}
+              <h3 class="font-bold text-gray-900">${esc(c.name)}</h3>
+              ${c.transferTitle ? `<div class="text-sm text-blue-700 mt-0.5">Tytuł przelewu: <span class="font-mono font-semibold">${esc(c.transferTitle)}</span></div>` : ''}
             </div>
             <div class="text-right flex-shrink-0">
               <div class="font-bold text-blue-700">${c.amount} zł</div>
@@ -604,10 +609,13 @@
       </div>
       ${G.edit ? `
       <div class="text-center pb-2">
-        <button onclick="deleteContrib('${c.id}','${c.name}')"
-          class="text-xs text-red-400 hover:text-red-600 underline">Usuń tę składkę</button>
+        <button class="del-contrib-btn text-xs text-red-400 hover:text-red-600 underline">Usuń tę składkę</button>
       </div>` : ''}
     `;
+    if (G.edit) {
+      const delBtn = document.querySelector('.del-contrib-btn');
+      if (delBtn) delBtn.addEventListener('click', () => deleteContrib(c.id, c.name));
+    }
   }
 
   function renderToolbar() {
@@ -638,7 +646,7 @@
 
     let thead = '<tr class="bg-gray-50 text-xs text-gray-500 uppercase"><th class="sticky-col px-3 py-3 text-left min-w-[140px]">Uczeń</th>';
     G.contribs.forEach(c => {
-      thead += `<th class="px-2 py-3 text-center min-w-[80px]"><div class="font-semibold truncate max-w-[75px] mx-auto text-gray-700" title="${c.name}">${c.name}</div><div class="text-blue-500 font-normal">${c.amount}zł</div><div class="text-gray-400 font-normal">${fmtDateShort(c.dueDate)}</div></th>`;
+      thead += `<th class="px-2 py-3 text-center min-w-[80px]"><div class="font-semibold truncate max-w-[75px] mx-auto text-gray-700" title="${escAttr(c.name)}">${esc(c.name)}</div><div class="text-blue-500 font-normal">${c.amount}zł</div><div class="text-gray-400 font-normal">${fmtDateShort(c.dueDate)}</div></th>`;
     });
     thead += '<th class="px-2 py-3 text-center">Σ</th></tr>';
 
@@ -661,7 +669,7 @@
         </td>`;
       });
       tbody += `<tr class="border-t border-gray-100 hover:bg-gray-50">
-        <td class="sticky-col px-3 py-3 text-sm font-medium text-gray-800">${s.lastName} ${s.firstName}</td>
+        <td class="sticky-col px-3 py-3 text-sm font-medium text-gray-800">${esc(s.lastName)} ${esc(s.firstName)}</td>
         ${cells}
         <td class="px-2 py-3 text-center text-xs font-semibold ${paidCnt===G.contribs.length?'text-green-600':'text-gray-500'}">${paidCnt}/${G.contribs.length}</td>
       </tr>`;
@@ -803,7 +811,7 @@
         <input type="checkbox" id="nc_${s.id}" checked value="${s.id}"
           class="w-4 h-4 rounded accent-blue-500">
         <label for="nc_${s.id}" class="text-sm text-gray-700 flex-1 cursor-pointer">
-          ${s.lastName} ${s.firstName}
+          ${esc(s.lastName)} ${esc(s.firstName)}
         </label>`;
       list.appendChild(row);
     });
@@ -927,18 +935,18 @@
       const isActive = cl.schoolYear === G.year;
       div.innerHTML = `
         <div>
-          <div class="font-semibold text-gray-800 text-sm">${label}</div>
-          <div class="text-xs text-gray-400">${cl.schoolYear}</div>
+          <div class="font-semibold text-gray-800 text-sm">${esc(label)}</div>
+          <div class="text-xs text-gray-400">${esc(cl.schoolYear)}</div>
         </div>
         <div class="flex items-center gap-2">
           <span class="text-xs px-2.5 py-1 rounded-full font-semibold ${
             isActive ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'
-          }">${isActive ? 'Aktywna' : cl.schoolYear}</span>
-          <button onclick="startEditClass('${cl.id}','${label.replace(/'/g,"\\'")}','${cl.schoolYear}')"
-            class="text-blue-400 hover:text-blue-600 text-sm transition-colors" title="Edytuj nazwę">✏️</button>
-          <button onclick="deleteClass('${cl.id}','${label.replace(/'/g,"\\'")}','${cl.schoolYear}')"
-            class="text-red-300 hover:text-red-500 font-bold text-base transition-colors" title="Usuń klasę">✕</button>
+          }">${isActive ? 'Aktywna' : esc(cl.schoolYear)}</span>
+          <button class="edit-class-btn text-blue-400 hover:text-blue-600 text-sm transition-colors" title="Edytuj nazwę">✏️</button>
+          <button class="del-class-btn text-red-300 hover:text-red-500 font-bold text-base transition-colors" title="Usuń klasę">✕</button>
         </div>`;
+      div.querySelector('.edit-class-btn').addEventListener('click', () => startEditClass(cl.id, label, cl.schoolYear));
+      div.querySelector('.del-class-btn').addEventListener('click', () => deleteClass(cl.id, label, cl.schoolYear));
       list.appendChild(div);
     });
   }
@@ -949,19 +957,21 @@
     const isActive = schoolYear === G.year;
     row.innerHTML = `
       <div class="flex items-center gap-2 flex-1 mr-2">
-        <input id="editClassLabel_${id}" type="text" value="${label}"
+        <input id="editClassLabel_${id}" type="text"
           class="border border-gray-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 w-28">
-        <span class="text-xs text-gray-400">${schoolYear}</span>
+        <span class="text-xs text-gray-400">${esc(schoolYear)}</span>
       </div>
       <div class="flex items-center gap-2 flex-wrap justify-end">
-        ${!isActive ? `<button onclick="setActiveClass('${schoolYear}')"
-          class="bg-green-500 hover:bg-green-600 text-white rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors">Aktywuj</button>` : ''}
-        <button onclick="saveEditClass('${id}','${schoolYear}')"
-          class="bg-blue-500 hover:bg-blue-600 text-white rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors">Zapisz</button>
+        ${!isActive ? `<button class="activate-class-btn bg-green-500 hover:bg-green-600 text-white rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors">Aktywuj</button>` : ''}
+        <button class="save-class-btn bg-blue-500 hover:bg-blue-600 text-white rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors">Zapisz</button>
         <button onclick="renderClassesTab()"
           class="border border-gray-300 rounded-xl px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50 transition-colors">Anuluj</button>
       </div>`;
-    document.getElementById(`editClassLabel_${id}`).focus();
+    const input = document.getElementById(`editClassLabel_${id}`);
+    input.value = label;
+    input.focus();
+    if (!isActive) row.querySelector('.activate-class-btn').addEventListener('click', () => setActiveClass(schoolYear));
+    row.querySelector('.save-class-btn').addEventListener('click', () => saveEditClass(id, schoolYear));
   }
 
   async function setActiveClass(schoolYear) {
