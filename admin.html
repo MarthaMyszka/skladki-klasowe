@@ -919,19 +919,30 @@
   function startEditClass(id, label, schoolYear) {
     const row = document.getElementById(`classRow_${id}`);
     if (!row) return;
+    const isActive = schoolYear === G.year;
     row.innerHTML = `
       <div class="flex items-center gap-2 flex-1 mr-2">
         <input id="editClassLabel_${id}" type="text" value="${label}"
           class="border border-gray-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 w-28">
         <span class="text-xs text-gray-400">${schoolYear}</span>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        ${!isActive ? `<button onclick="setActiveClass('${schoolYear}')"
+          class="bg-green-500 hover:bg-green-600 text-white rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors">Aktywuj</button>` : ''}
         <button onclick="saveEditClass('${id}','${schoolYear}')"
           class="bg-blue-500 hover:bg-blue-600 text-white rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors">Zapisz</button>
         <button onclick="renderClassesTab()"
           class="border border-gray-300 rounded-xl px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50 transition-colors">Anuluj</button>
       </div>`;
     document.getElementById(`editClassLabel_${id}`).focus();
+  }
+
+  async function setActiveClass(schoolYear) {
+    G.year = schoolYear;
+    G.contribId = 'ALL';
+    G.settingsTab = 'klasa';
+    await loadData();
+    showView('settings');
   }
 
   async function saveEditClass(id, schoolYear) {
@@ -951,11 +962,29 @@
 
   async function deleteClass(id, label, schoolYear) {
     if (schoolYear === G.year) {
-      alert(`Nie można usunąć aktywnej klasy „${label}".\nNajpierw przełącz się na inny rocznik.`);
+      alert(`Nie można usunąć aktywnej klasy „${label}".\nKliknij ✏️ przy innej klasie i użyj przycisku „Aktywuj", a następnie wróć tu i usuń tę klasę.`);
       return;
     }
-    if (!confirm(`Usunąć klasę „${label}" (${schoolYear})?\n\nSkładki i płatności z tego rocznika pozostaną w bazie, ale zakładka zniknie z panelu.`)) return;
+    // Pobierz zbiórki i płatności dla tego rocznika
+    const [cSnap, pSnap] = await Promise.all([
+      db.collection('contributions').where('schoolYear','==',schoolYear).get(),
+      db.collection('payments').where('schoolYear','==',schoolYear).get()
+    ]);
+    const cCount = cSnap.size;
+    const pCount = pSnap.size;
+    let msg = `Usunąć klasę „${label}" (${schoolYear})?`;
+    if (cCount > 0 || pCount > 0) {
+      msg += `\n\nRazem z klasą zostaną trwale usunięte:\n• ${cCount} ${cCount === 1 ? 'zbiórka' : 'zbiórki/zbiórek'}\n• ${pCount} ${pCount === 1 ? 'rekord płatności' : 'rekordów płatności'}`;
+    }
+    msg += '\n\nTej operacji nie można cofnąć.';
+    if (!confirm(msg)) return;
     try {
+      const allDocs = [...cSnap.docs, ...pSnap.docs];
+      for (let i = 0; i < allDocs.length; i += 490) {
+        const batch = db.batch();
+        allDocs.slice(i, i + 490).forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+      }
       await db.collection('classes').doc(id).delete();
       G.classes = G.classes.filter(c => c.id !== id);
       buildYearTabs();
