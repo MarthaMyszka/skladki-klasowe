@@ -144,6 +144,7 @@
         // 1. Admin (skarbnik)?
         const uDoc = await db.collection('users').doc(user.uid).get();
         if (uDoc.exists && uDoc.data().isAdmin === true) {
+          sessionStorage.removeItem('approvedRetries');
           window.location.href = 'admin.html'; return;
         }
 
@@ -151,19 +152,30 @@
         const sSnap = await db.collection('students')
           .where('parentEmails', 'array-contains', user.email.toLowerCase())
           .where('active', '==', true).limit(1).get();
-        if (!sSnap.empty) { window.location.href = 'parent.html'; return; }
+        if (!sSnap.empty) {
+          sessionStorage.removeItem('approvedRetries');
+          window.location.href = 'parent.html'; return;
+        }
 
         // 3. Sprawdź wniosek
         const reqDoc = await db.collection('requests').doc(user.uid).get();
         if (reqDoc.exists) {
           const req = reqDoc.data();
           if (req.status === 'approved') {
-            // Zatwierdzono, ale email jeszcze nie jest w students – zaczekaj chwilę
+            // Zatwierdzono – czekaj na propagację emaila do students (max 3 próby)
+            const retries = parseInt(sessionStorage.getItem('approvedRetries') || '0');
+            if (retries >= 3) {
+              sessionStorage.removeItem('approvedRetries');
+              show('loginView', 'Błąd synchronizacji konta. Skontaktuj się ze skarbnikiem klasy.');
+              return;
+            }
+            sessionStorage.setItem('approvedRetries', String(retries + 1));
             setTimeout(() => window.location.reload(), 2000);
             show('loadingView'); return;
           }
-          if (req.status === 'rejected') { show('rejectedView'); return; }
+          if (req.status === 'rejected') { sessionStorage.removeItem('approvedRetries'); show('rejectedView'); return; }
           // pending
+          sessionStorage.removeItem('approvedRetries');
           document.getElementById('pendingEmail').textContent = user.email;
           document.getElementById('pendingChildInfo').textContent =
             `Dziecko: ${req.childFirstName} ${req.childLastName}`;
@@ -171,6 +183,7 @@
         }
 
         // 4. Nowy użytkownik – pokaż formularz rejestracji
+        sessionStorage.removeItem('approvedRetries');
         document.getElementById('regUserInfo').textContent = `Zalogowano jako: ${user.email}`;
         show('registerView');
 
