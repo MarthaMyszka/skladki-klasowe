@@ -546,18 +546,14 @@
     let rows = participants.map(s => {
       const pmt  = G.payments[pmtKey(s.id,c.id)];
       const paid = pmt && pmt.paid;
+      const statusEl = G.edit
+        ? `<button onclick="openPmtModal('${s.id}','${c.id}',${paid})" class="text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${paid ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-red-100 text-red-700 hover:bg-red-200'}">${paid ? '✓ OPŁACONA' : '✗ ZALEGA'}</button>`
+        : `<span class="text-xs font-bold px-3 py-1.5 rounded-full inline-block ${paid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">${paid ? '✓ OPŁACONA' : '✗ ZALEGA'}</span>`;
       return `
         <tr class="hover:bg-gray-50 transition-colors">
           <td class="px-4 py-3.5 font-medium text-gray-800 text-sm">${esc(s.lastName)} ${esc(s.firstName)}</td>
           <td class="px-4 py-3.5 text-center">
-            <button onclick="openPmtModal('${s.id}','${c.id}',${paid})"
-              class="text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${
-                paid
-                ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                : 'bg-red-100 text-red-700 hover:bg-red-200'
-              }">
-              ${paid ? '✓ OPŁACONA' : '✗ ZALEGA'}
-            </button>
+            ${statusEl}
             ${paid && pmt.paidDate ? `<div class="text-xs text-green-600 mt-0.5">${fmtDate(pmt.paidDate)}</div>` : ''}
           </td>
           ${G.edit ? `<td class="px-4 py-3.5 text-center"><button onclick="removeFromContrib('${s.id}')" class="text-red-300 hover:text-red-500 transition-colors font-bold">✕</button></td>` : ''}
