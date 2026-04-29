@@ -286,9 +286,13 @@
 
     // ── Zgoda RODO ────────────────────────────────────────
     async function checkGdprConsent(user) {
-      const consentDoc = await db.collection('consents').doc(user.uid).get();
-      // Brak zgody = nowy rekord potrzebny (stary rodzic lub nowy bez gdprConsentAt)
-      const hasConsent = consentDoc.exists && consentDoc.data().gdprConsentAt;
+      const [consentDoc, reqDoc] = await Promise.all([
+        db.collection('consents').doc(user.uid).get(),
+        db.collection('requests').doc(user.uid).get()
+      ]);
+      const hasConsent =
+        (consentDoc.exists && consentDoc.data().gdprConsentAt) ||
+        (reqDoc.exists && reqDoc.data().gdprConsentAt);
       if (!hasConsent) {
         document.getElementById('gdprBanner').classList.remove('hidden');
       }
