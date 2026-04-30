@@ -170,7 +170,7 @@
                 <th class="px-3 py-3 text-left whitespace-nowrap hidden sm:table-cell">Tel. rodzica</th>
                 <th class="px-3 py-3 text-left whitespace-nowrap hidden sm:table-cell">Imię rodzica</th>
                 <th class="px-3 py-3 text-left whitespace-nowrap hidden sm:table-cell">Od kiedy</th>
-                <th id="settingsDelCol" class="hidden px-3 py-3 text-center">✕</th>
+                <th id="settingsDelCol" class="hidden px-3 py-3 text-center">Akcje</th>
               </tr>
             </thead>
             <tbody id="settingsBody" class="divide-y divide-gray-100"></tbody>
@@ -351,6 +351,53 @@
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════════
+     MODAL: Edytuj ucznia
+══════════════════════════════════════════════════════ -->
+<div id="editStudentModal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+    <h3 class="font-bold text-gray-800 text-lg mb-4">✏️ Edytuj ucznia</h3>
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Imię <span class="text-red-400">*</span></label>
+        <input type="text" id="editSFirst"
+          class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Nazwisko <span class="text-red-400">*</span></label>
+        <input type="text" id="editSLast"
+          class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="block text-xs font-medium text-gray-600 mb-1">Imię rodzica</label>
+      <input type="text" id="editSParentName"
+        class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+    </div>
+    <div class="mb-3">
+      <label class="block text-xs font-medium text-gray-600 mb-1">Tel. rodzica</label>
+      <input type="tel" id="editSPhone"
+        class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+    </div>
+    <div class="mb-4">
+      <label class="block text-xs font-medium text-gray-600 mb-1">Od kiedy w klasie</label>
+      <input type="month" id="editSEnrolled"
+        class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+    </div>
+    <p id="editStudentMsg" class="text-xs text-center mb-3 hidden"></p>
+    <div class="flex gap-3">
+      <button id="btnCancelEditStudent"
+        class="flex-1 border border-gray-200 rounded-xl py-2.5 text-gray-600 text-sm font-semibold hover:bg-gray-50 transition-colors">
+        Anuluj
+      </button>
+      <button id="btnDoEditStudent"
+        class="flex-1 bg-blue-500 hover:bg-blue-600 text-white rounded-xl py-2.5 text-sm font-semibold transition-colors">
+        Zapisz zmiany
+      </button>
+    </div>
+  </div>
+</div>
+
 <script>
   firebase.initializeApp(firebaseConfig);
   const auth = firebase.auth();
@@ -426,7 +473,8 @@
     classes: [],           // {id, label, schoolYear}
     pendingReqs: [],       // {id, uid, email, childFirstName, childLastName, status}
     pendingDel: null,
-    pendingApprove: null
+    pendingApprove: null,
+    editingStudentId: null
   };
 
   // ── Nawigacja widoków ─────────────────────────────────
@@ -1109,8 +1157,12 @@
         <td class="px-3 py-3 text-xs text-gray-500 hidden sm:table-cell">${esc(s.parentName) || '—'}</td>
         <td class="px-3 py-3 text-xs text-gray-500 hidden sm:table-cell">${s.enrolledFrom ? esc(s.enrolledFrom.split('-').reverse().join('.')) : '—'}</td>
         <td class="hidden px-3 py-3 text-center settings-del-cell">
-          <button class="del-student-btn text-red-300 hover:text-red-500 font-bold text-base transition-colors">✕</button>
+          <div class="flex items-center justify-center gap-2">
+            <button class="edit-student-btn text-blue-300 hover:text-blue-500 text-base transition-colors" title="Edytuj">✏️</button>
+            <button class="del-student-btn text-red-300 hover:text-red-500 font-bold text-base transition-colors" title="Usuń">✕</button>
+          </div>
         </td>`;
+      tr.querySelector('.edit-student-btn').addEventListener('click', () => openEditStudentModal(s.id));
       tr.querySelector('.del-student-btn').addEventListener('click', () => deleteStudent(s.id, `${s.firstName} ${s.lastName}`));
       tbody.appendChild(tr);
     });
@@ -1185,6 +1237,60 @@
     document.getElementById('deleteMsg').textContent = `„${name}" zostanie usunięty z listy.`;
     document.getElementById('deleteModal').classList.remove('hidden');
   }
+
+  // ── Modal: edytuj ucznia ──────────────────────────────
+  function openEditStudentModal(studentId) {
+    const s = G.students.find(s => s.id === studentId);
+    if (!s) return;
+    G.editingStudentId = studentId;
+    document.getElementById('editSFirst').value = s.firstName || '';
+    document.getElementById('editSLast').value = s.lastName || '';
+    document.getElementById('editSParentName').value = s.parentName || '';
+    document.getElementById('editSPhone').value = s.parentPhone || '';
+    document.getElementById('editSEnrolled').value = s.enrolledFrom ? s.enrolledFrom.substring(0, 7) : '';
+    const msg = document.getElementById('editStudentMsg');
+    msg.classList.add('hidden');
+    document.getElementById('editStudentModal').classList.remove('hidden');
+  }
+
+  document.getElementById('btnCancelEditStudent').onclick = () => {
+    document.getElementById('editStudentModal').classList.add('hidden');
+    G.editingStudentId = null;
+  };
+
+  document.getElementById('btnDoEditStudent').onclick = async () => {
+    const id = G.editingStudentId;
+    if (!id) return;
+    const firstName  = document.getElementById('editSFirst').value.trim();
+    const lastName   = document.getElementById('editSLast').value.trim();
+    const parentName = document.getElementById('editSParentName').value.trim();
+    const phone      = document.getElementById('editSPhone').value.trim();
+    const enrolled   = document.getElementById('editSEnrolled').value;
+    const msg        = document.getElementById('editStudentMsg');
+
+    if (!firstName || !lastName) {
+      msg.textContent = 'Imię i nazwisko są wymagane.';
+      msg.className = 'text-xs text-center mb-3 text-red-600';
+      msg.classList.remove('hidden');
+      return;
+    }
+    try {
+      msg.textContent = 'Zapisuję…';
+      msg.className = 'text-xs text-center mb-3 text-gray-400';
+      msg.classList.remove('hidden');
+      await db.collection('students').doc(id).update({
+        firstName, lastName, parentName, parentPhone: phone,
+        enrolledFrom: enrolled || ''
+      });
+      document.getElementById('editStudentModal').classList.add('hidden');
+      G.editingStudentId = null;
+      await loadData();
+      showView('settings');
+    } catch(err) {
+      msg.textContent = 'Błąd: ' + err.message;
+      msg.className = 'text-xs text-center mb-3 text-red-600';
+    }
+  };
 
   // ── Modal: zatwierdź wniosek ──────────────────────────
   function openApproveModal(reqId) {
